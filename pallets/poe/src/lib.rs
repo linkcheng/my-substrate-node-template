@@ -62,10 +62,13 @@ pub mod pallet {
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		#[pallet::weight(0)]
-		pub fn create_claim(origin: OriginFor<T>, claim: Vec<u8>) -> DispatchResult {
+		pub fn create_claim(
+			origin: OriginFor<T>,
+			bounded_claim: BoundedVec<u8, T::MaxClaimLength>,
+		) -> DispatchResult {
 			let sender = ensure_signed(origin)?;
-			let bounded_claim = BoundedVec::<u8, T::MaxClaimLength>::try_from(claim.clone())
-				.map_err(|_| Error::<T>::ClaimTooLong)?;
+			// let bounded_claim = BoundedVec::<u8, T::MaxClaimLength>::try_from(claim.clone())
+			// 	.map_err(|_| Error::<T>::ClaimTooLong)?;
 			ensure!(!Proofs::<T>::contains_key(&bounded_claim), Error::<T>::ProofAlreadyExist);
 
 			Proofs::<T>::insert(
@@ -73,16 +76,19 @@ pub mod pallet {
 				(sender.clone(), frame_system::Pallet::<T>::block_number()),
 			);
 
-			Self::deposit_event(Event::ClaimCreated(sender, claim));
+			Self::deposit_event(Event::ClaimCreated(sender, bounded_claim.into()));
 
 			Ok(())
 		}
 
 		#[pallet::weight(0)]
-		pub fn revoke_claim(origin: OriginFor<T>, claim: Vec<u8>) -> DispatchResult {
+		pub fn revoke_claim(
+			origin: OriginFor<T>,
+			bounded_claim: BoundedVec<u8, T::MaxClaimLength>,
+		) -> DispatchResult {
 			let sender = ensure_signed(origin)?;
-			let bounded_claim = BoundedVec::<u8, T::MaxClaimLength>::try_from(claim.clone())
-				.map_err(|_| Error::<T>::ClaimTooLong)?;
+			// let bounded_claim = BoundedVec::<u8, T::MaxClaimLength>::try_from(claim.clone())
+			// 	.map_err(|_| Error::<T>::ClaimTooLong)?;
 
 			let (owner, _) = Proofs::<T>::get(&bounded_claim).ok_or(Error::<T>::ClaimNotExist)?;
 
@@ -90,7 +96,7 @@ pub mod pallet {
 
 			Proofs::<T>::remove(&bounded_claim);
 
-			Self::deposit_event(Event::ClaimRevoked(sender, claim));
+			Self::deposit_event(Event::ClaimRevoked(sender, bounded_claim.into()));
 
 			Ok(())
 		}
@@ -98,19 +104,24 @@ pub mod pallet {
 		#[pallet::weight(0)]
 		pub fn transfer_claim(
 			origin: OriginFor<T>,
-			claim: Vec<u8>,
+			bounded_claim: BoundedVec<u8, T::MaxClaimLength>,
 			dest: T::AccountId,
 		) -> DispatchResult {
 			let sender = ensure_signed(origin)?;
-			let bounded_claim = BoundedVec::<u8, T::MaxClaimLength>::try_from(claim.clone())
-				.map_err(|_| Error::<T>::ClaimTooLong)?;
+			// let bounded_claim = BoundedVec::<u8, T::MaxClaimLength>::try_from(claim.clone())
+			// 	.map_err(|_| Error::<T>::ClaimTooLong)?;
 
-			let (owner, _) = Proofs::<T>::get(&bounded_claim).ok_or(Error::<T>::ClaimNotExist)?;
+			let (owner, block_number) =
+				Proofs::<T>::get(&bounded_claim).ok_or(Error::<T>::ClaimNotExist)?;
 			ensure!(owner == sender, Error::<T>::NotClaimOwner);
 
-			Proofs::<T>::insert(&bounded_claim, (dest.clone(), frame_system::Pallet::<T>::block_number()));
+			// Proofs::<T>::insert(&bounded_claim, (dest.clone(), frame_system::Pallet::<T>::block_number()));
+			Proofs::<T>::try_mutate(&bounded_claim, |v| -> DispatchResult {
+				*v = Some((dest.clone(), block_number));
+				Ok(())
+			})?;
 
-			Self::deposit_event(Event::ClaimTransfered(sender, claim, dest));
+			Self::deposit_event(Event::ClaimTransfered(sender, bounded_claim.into(), dest));
 
 			Ok(())
 		}
