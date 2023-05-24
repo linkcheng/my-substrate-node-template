@@ -5,6 +5,12 @@
 /// <https://docs.substrate.io/reference/frame-pallets/>
 pub use pallet::*;
 
+#[cfg(test)]
+mod mock;
+
+#[cfg(test)]
+mod tests;
+
 #[frame_support::pallet]
 pub mod pallet {
 	use frame_support::pallet_prelude::*;
@@ -12,7 +18,6 @@ pub mod pallet {
 	use sp_std::prelude::*;
 
 	#[pallet::pallet]
-	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
@@ -61,14 +66,14 @@ pub mod pallet {
 	// Dispatchable functions must be annotated with a weight and must return a DispatchResult.
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		#[pallet::weight(0)]
+		#[pallet::call_index(0)]
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1).ref_time())]
 		pub fn create_claim(
 			origin: OriginFor<T>,
 			bounded_claim: BoundedVec<u8, T::MaxClaimLength>,
 		) -> DispatchResult {
 			let sender = ensure_signed(origin)?;
-			// let bounded_claim = BoundedVec::<u8, T::MaxClaimLength>::try_from(claim.clone())
-			// 	.map_err(|_| Error::<T>::ClaimTooLong)?;
+
 			ensure!(!Proofs::<T>::contains_key(&bounded_claim), Error::<T>::ProofAlreadyExist);
 
 			Proofs::<T>::insert(
@@ -81,15 +86,13 @@ pub mod pallet {
 			Ok(())
 		}
 
-		#[pallet::weight(0)]
+		#[pallet::call_index(1)]
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1).ref_time())]
 		pub fn revoke_claim(
 			origin: OriginFor<T>,
 			bounded_claim: BoundedVec<u8, T::MaxClaimLength>,
 		) -> DispatchResult {
 			let sender = ensure_signed(origin)?;
-			// let bounded_claim = BoundedVec::<u8, T::MaxClaimLength>::try_from(claim.clone())
-			// 	.map_err(|_| Error::<T>::ClaimTooLong)?;
-
 			let (owner, _) = Proofs::<T>::get(&bounded_claim).ok_or(Error::<T>::ClaimNotExist)?;
 
 			ensure!(owner == sender, Error::<T>::NotClaimOwner);
@@ -101,18 +104,17 @@ pub mod pallet {
 			Ok(())
 		}
 
-		#[pallet::weight(0)]
+		#[pallet::call_index(2)]
+		#[pallet::weight(10_000 + T::DbWeight::get().writes(1).ref_time())]
 		pub fn transfer_claim(
 			origin: OriginFor<T>,
 			bounded_claim: BoundedVec<u8, T::MaxClaimLength>,
 			dest: T::AccountId,
 		) -> DispatchResult {
 			let sender = ensure_signed(origin)?;
-			// let bounded_claim = BoundedVec::<u8, T::MaxClaimLength>::try_from(claim.clone())
-			// 	.map_err(|_| Error::<T>::ClaimTooLong)?;
-
 			let (owner, block_number) =
 				Proofs::<T>::get(&bounded_claim).ok_or(Error::<T>::ClaimNotExist)?;
+
 			ensure!(owner == sender, Error::<T>::NotClaimOwner);
 
 			// Proofs::<T>::insert(&bounded_claim, (dest.clone(), frame_system::Pallet::<T>::block_number()));

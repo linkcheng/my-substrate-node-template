@@ -1,3 +1,5 @@
+单元测试
+![10 单元测试.jps](docs/10%20%E5%8D%95%E5%85%83%E6%B5%8B%E8%AF%95.jpg)
 
 常用的宏
 
@@ -16,7 +18,7 @@ construct_runtime! 添加模块到runtime
 常用的存储数据结构
 
 ```
-StorageValue 单指
+StorageValue 单值
 StorageMap 映射
 StorageDoubleMap 双键映射
 StorageNmap 多键映射
