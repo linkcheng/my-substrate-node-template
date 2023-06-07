@@ -168,7 +168,7 @@ pub mod pallet {
 
 			let owner = Self::kitty_owner(kitty_id).unwrap();
 			ensure!(owner == who, Error::<T>::NotOwner);
-			ensure!(Self::kitty_on_sale(kitty_id).is_some(), Error::<T>::AlreadyOnSale);
+			ensure!(Self::kitty_on_sale(kitty_id).is_none(), Error::<T>::AlreadyOnSale);
 
 			KittyOnSale::<T>::insert(kitty_id, ());
 
