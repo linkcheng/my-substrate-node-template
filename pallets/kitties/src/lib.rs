@@ -29,9 +29,10 @@ pub mod pallet {
 	pub struct Kitty {
 		pub dna: [u8; 16],
 		pub name: [u8; 8],
+		pub age: u8,
 	}
 
-	const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+	const STORAGE_VERSION: StorageVersion = StorageVersion::new(migrations::VERSION);
 
 	#[pallet::pallet]
 	#[pallet::storage_version(STORAGE_VERSION)]
@@ -91,7 +92,7 @@ pub mod pallet {
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn on_runtime_upgrade() -> Weight {
-			migrations::v1::migrate::<T>()
+			migrations::migrate::<T>()
 		}
 	}
 
@@ -99,12 +100,12 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		#[pallet::call_index(0)]
 		#[pallet::weight(10_000 + T::DbWeight::get().writes(1).ref_time())]
-		pub fn create(origin: OriginFor<T>, name: [u8; 8]) -> DispatchResult {
+		pub fn create(origin: OriginFor<T>, name: [u8; 8], age: u8) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 
 			// Update storage.
 			let kitty_id = Self::get_next_id()?;
-			let kitty = Kitty { dna: Self::random_value(&who), name };
+			let kitty = Kitty { dna: Self::random_value(&who), name, age};
 			let price = T::KittyPrice::get();
 			// T::Currency::reserve(&who, price)?;
 			T::Currency::transfer(&who, &Self::get_account_id(), price, ExistenceRequirement::KeepAlive)?;
@@ -119,7 +120,7 @@ pub mod pallet {
 
 		#[pallet::call_index(1)]
 		#[pallet::weight(10_000 + T::DbWeight::get().writes(1).ref_time())]
-		pub fn breed(origin: OriginFor<T>, kitty_id1: KittyId, kitty_id2: KittyId, name: [u8; 8]) -> DispatchResult {
+		pub fn breed(origin: OriginFor<T>, kitty_id1: KittyId, kitty_id2: KittyId, name: [u8; 8], age: u8) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 
 			ensure!(kitty_id1 != kitty_id2, Error::<T>::SameKittyId);
@@ -130,7 +131,7 @@ pub mod pallet {
 			let kitty_id = Self::get_next_id()?;
 			let kitty1 = Self::kitties(kitty_id1).unwrap();
 			let kitty2 = Self::kitties(kitty_id2).unwrap();
-			let kitty = Kitty { dna: Self::breed_value(&who, &kitty1, &kitty2), name };
+			let kitty = Kitty { dna: Self::breed_value(&who, &kitty1, &kitty2), name, age };
 
 			let price = T::KittyPrice::get();
 			// T::Currency::reserve(&who, price)?;

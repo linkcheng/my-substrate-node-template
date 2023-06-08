@@ -5,21 +5,23 @@ use frame_support::{
 };
 
 #[derive(Encode, Decode, Clone, Copy, RuntimeDebug, PartialEq, Eq, Default, TypeInfo, MaxEncodedLen)]
-pub struct V1Kitty([u8; 16]);
+pub struct V2Kitty{
+	pub dna: [u8; 16],
+	pub name: [u8; 8],
+}
 
-pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(1);
+pub const STORAGE_VERSION: StorageVersion = StorageVersion::new(2);
 
-pub fn upgrade_v1<T: Config>(version: StorageVersion) -> Weight {
+pub fn upgrade_v2<T: Config>(version: StorageVersion) -> Weight {
 	if version != STORAGE_VERSION {
 		return Weight::zero();
 	}
 
 	let prefix = Kitties::<T>::module_prefix();
 	let item = Kitties::<T>::storage_prefix();
-	let default_name: [u8; 8] = *b"Unknown ";
 
-	for (index, kitty) in storage_key_iter::<KittyId, V1Kitty, Blake2_128Concat>(prefix, item).drain() {
-		let new_kitty = Kitty { dna: kitty.0, name: default_name, age: 1};
+	for (index, kitty) in storage_key_iter::<KittyId, V2Kitty, Blake2_128Concat>(prefix, item).drain() {
+		let new_kitty = Kitty { dna: kitty.dna, name: kitty.name, age: 1 };
 		Kitties::<T>::insert(index, &new_kitty);
 	}
 

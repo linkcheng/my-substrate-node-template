@@ -7,7 +7,7 @@ fn test_create() {
 		let alice = 1;
 		let kitty_id = 0;
 		// assert_eq!(KittiesModule::get_next_id().unwrap(), kitty_id);
-		assert_ok!(KittiesModule::create(RuntimeOrigin::signed(alice), KITTY_NAME_1));
+		assert_ok!(KittiesModule::create(RuntimeOrigin::signed(alice), KITTY_NAME_1, 1));
 
 		// success
 		assert_eq!(KittiesModule::get_next_id().unwrap(), kitty_id + 1);
@@ -21,7 +21,7 @@ fn test_create() {
 
 		// InvalidKittyId
 		crate::NextKittyId::<Test>::set(crate::KittyId::max_value());
-		assert_noop!(KittiesModule::create(RuntimeOrigin::signed(alice), KITTY_NAME_1), Error::<Test>::InvalidKittyId);
+		assert_noop!(KittiesModule::create(RuntimeOrigin::signed(alice), KITTY_NAME_1, 1), Error::<Test>::InvalidKittyId);
 	});
 }
 
@@ -38,20 +38,20 @@ fn test_breed() {
 
 		// InvalidKittyId
 		assert_noop!(
-			KittiesModule::breed(RuntimeOrigin::signed(charles), kitty_id1, kitty_id2, KITTY_NAME_3),
+			KittiesModule::breed(RuntimeOrigin::signed(charles), kitty_id1, kitty_id2, KITTY_NAME_3, 3),
 			Error::<Test>::InvalidKittyId
 		);
 		// SameKittyId
 		assert_noop!(
-			KittiesModule::breed(RuntimeOrigin::signed(charles), kitty_id1, kitty_id1, KITTY_NAME_3),
+			KittiesModule::breed(RuntimeOrigin::signed(charles), kitty_id1, kitty_id1, KITTY_NAME_3, 3),
 			Error::<Test>::SameKittyId
 		);
 
-		let _ = KittiesModule::create(RuntimeOrigin::signed(alice), KITTY_NAME_1);
-		let _ = KittiesModule::create(RuntimeOrigin::signed(bob), KITTY_NAME_2);
+		let _ = KittiesModule::create(RuntimeOrigin::signed(alice), KITTY_NAME_1, 10);
+		let _ = KittiesModule::create(RuntimeOrigin::signed(bob), KITTY_NAME_2, 11);
 
 		// success
-		assert_ok!(KittiesModule::breed(RuntimeOrigin::signed(charles), kitty_id1, kitty_id2, KITTY_NAME_3));
+		assert_ok!(KittiesModule::breed(RuntimeOrigin::signed(charles), kitty_id1, kitty_id2, KITTY_NAME_3, 3));
 		assert_eq!(KittiesModule::get_next_id().unwrap(), kitty_id3 + 1);
 		assert_eq!(KittiesModule::kitty_parents(kitty_id3).unwrap(), (kitty_id1, kitty_id2));
 
@@ -71,7 +71,7 @@ fn transfer_should_work() {
 		crate::NextKittyId::<Test>::set(kitty_id);
 
 		// Alice creates a kitty
-		assert_ok!(KittiesModule::create(RuntimeOrigin::signed(alice), KITTY_NAME_1));
+		assert_ok!(KittiesModule::create(RuntimeOrigin::signed(alice), KITTY_NAME_1, 1));
 		// Alice transfers the kitty to Bob
 		assert_ok!(KittiesModule::transfer(RuntimeOrigin::signed(alice), kitty_id, bob));
 		// Check that the kitty now belongs to Bob
@@ -114,7 +114,7 @@ fn transfer_should_fail_if_not_owner() {
 		crate::NextKittyId::<Test>::set(kitty_id);
 
 		// Alice creates a kitty
-		assert_ok!(KittiesModule::create(RuntimeOrigin::signed(alice), KITTY_NAME_1));
+		assert_ok!(KittiesModule::create(RuntimeOrigin::signed(alice), KITTY_NAME_1, 1));
 		// Bob tries to transfer the kitty to Charlie
 		assert_noop!(
 			KittiesModule::transfer(RuntimeOrigin::signed(bob), kitty_id, charlie),
@@ -133,7 +133,7 @@ fn transfer_should_fail_if_invalid_kitty_id() {
 		crate::NextKittyId::<Test>::set(kitty_id);
 
 		// Alice creates a kitty
-		assert_ok!(KittiesModule::create(RuntimeOrigin::signed(alice), KITTY_NAME_1));
+		assert_ok!(KittiesModule::create(RuntimeOrigin::signed(alice), KITTY_NAME_1, 1));
 		// Alice transfers the kitty to Bob
 		assert_ok!(KittiesModule::transfer(RuntimeOrigin::signed(alice), kitty_id, bob));
 		// Bob tries to transfer a non-existent kitty to Alice
@@ -151,7 +151,7 @@ mod test_buy {
      #[test]
     fn buy_works() {
         new_test_ext().execute_with(|| {
-            assert_ok!(KittiesModule::create(RuntimeOrigin::signed(1), KITTY_NAME_1));
+            assert_ok!(KittiesModule::create(RuntimeOrigin::signed(1), KITTY_NAME_1, 1));
             assert_ok!(KittiesModule::sale(RuntimeOrigin::signed(1), 0));
             assert_ok!(KittiesModule::buy(RuntimeOrigin::signed(2), 0));
 			assert_eq!(KittiesModule::kitty_owner(0).unwrap(), 2);
@@ -169,7 +169,7 @@ mod test_buy {
      #[test]
     fn buy_fails_when_already_owned() {
         new_test_ext().execute_with(|| {
-            assert_ok!(KittiesModule::create(RuntimeOrigin::signed(1), KITTY_NAME_1));
+            assert_ok!(KittiesModule::create(RuntimeOrigin::signed(1), KITTY_NAME_1, 1));
             assert_noop!(
                 KittiesModule::buy(RuntimeOrigin::signed(1), 0),
                 Error::<Test>::AlreadyOwned
@@ -179,7 +179,7 @@ mod test_buy {
      #[test]
     fn buy_fails_when_not_on_sale() {
         new_test_ext().execute_with(|| {
-            assert_ok!(KittiesModule::create(RuntimeOrigin::signed(1), KITTY_NAME_1));
+            assert_ok!(KittiesModule::create(RuntimeOrigin::signed(1), KITTY_NAME_1, 1));
             assert_noop!(
                 KittiesModule::buy(RuntimeOrigin::signed(2), 0),
                 Error::<Test>::NotOnSale
@@ -195,7 +195,7 @@ mod test_sale {
 	#[test]
 	fn sale_should_work() {
 		new_test_ext().execute_with(|| {
-			assert_ok!(KittiesModule::create(RuntimeOrigin::signed(1), KITTY_NAME_1));
+			assert_ok!(KittiesModule::create(RuntimeOrigin::signed(1), KITTY_NAME_1, 1));
 			assert_ok!(KittiesModule::sale(RuntimeOrigin::signed(1), 0));
 			assert_eq!(KittiesModule::kitty_on_sale(0), Some(()));
 		});
@@ -204,7 +204,7 @@ mod test_sale {
 	#[test]
 	fn sale_should_fail_when_not_owner() {
 		new_test_ext().execute_with(|| {
-			assert_ok!(KittiesModule::create(RuntimeOrigin::signed(1), KITTY_NAME_1));
+			assert_ok!(KittiesModule::create(RuntimeOrigin::signed(1), KITTY_NAME_1, 1));
 			assert_noop!(
 				KittiesModule::sale(RuntimeOrigin::signed(2), 0),
 				Error::<Test>::NotOwner
@@ -223,7 +223,7 @@ mod test_sale {
 	#[test]
 	fn sale_should_fail_when_already_on_sale() {
 		new_test_ext().execute_with(|| {
-			assert_ok!(KittiesModule::create(RuntimeOrigin::signed(1), KITTY_NAME_1));
+			assert_ok!(KittiesModule::create(RuntimeOrigin::signed(1), KITTY_NAME_1, 1));
 			assert_ok!(KittiesModule::sale(RuntimeOrigin::signed(1), 0));
 			assert_noop!(
 				KittiesModule::sale(RuntimeOrigin::signed(1), 0),
