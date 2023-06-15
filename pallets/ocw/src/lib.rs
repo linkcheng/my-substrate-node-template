@@ -20,6 +20,12 @@ pub mod pallet {
 	use frame_system::pallet_prelude::*;
 	use scale_info::prelude::*;
 	use scale_info::prelude::string::String;
+	use sp_io::offchain_index;
+	// use serde::{Deserialize};
+
+
+	#[derive(Debug, Encode, Decode, Default)]
+	struct IndexingData(Vec<u8>, u64);
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
@@ -101,6 +107,25 @@ pub mod pallet {
 				},
 			}
 		}
+
+		#[pallet::call_index(2)]
+		#[pallet::weight(10_000)]
+		pub fn extrinsic(origin: OriginFor<T>, number: u64) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+
+			let key = Self::derive_key();
+			
+			let data = IndexingData(b"submit_number_unsigned".to_vec(), number);
+
+			let vec = data.encode();
+			offchain_index::set(&key, &data.encode());
+
+			let hex = Self::to_hex(vec);
+
+			log::info!("OCW ==> in extrinsic, value = {:?}", hex);
+
+			Ok(())
+		}
 	}
 
 	#[pallet::hooks]
@@ -108,58 +133,63 @@ pub mod pallet {
         fn offchain_worker(block_number: T::BlockNumber) {
             log::info!("OCW ==> Hello World from offchain workers!: {:?}", block_number);
                 
-			let key = Self::derive_key();
-			let val_ref = StorageValueRef::persistent(&key);
+			// let key = Self::derive_key();
+			// let val_ref = StorageValueRef::persistent(&key);
 
-			//  get a local random value 
-			let random_slice = sp_io::offchain::random_seed();
+			// //  get a local random value 
+			// let random_slice = sp_io::offchain::random_seed();
 			
-			//  get a local timestamp
-			let timestamp_u64 = sp_io::offchain::timestamp().unix_millis();
+			// //  get a local timestamp
+			// let timestamp_u64 = sp_io::offchain::timestamp().unix_millis();
 
-			// combine to a tuple and print it  
-			let value = (random_slice, timestamp_u64);
+			// // combine to a tuple and print it  
+			// let value = (random_slice, timestamp_u64);
 			
-			log::info!("OCW ==> value to write: {:?}", value);
+			// log::info!("OCW ==> value to write: {:?}", value);
 
-			// transfer value to 0x data
-			let value_bytes = value.encode();
-
-			let mut hex_string = String::from("0x");
-			for byte in value_bytes {
-				hex_string.push_str(&format!("{:02x}", byte)); 
-			}
-			log::info!("OCW ==>> value to bytes (hex): {}", hex_string);
+			// let hex_string: String = Self::to_hex(value.encode());
+			// log::info!("OCW ==>> value to bytes (hex): {}", hex_string);
 			
-			struct StateError;
+			// struct StateError;
 
-			//  write or mutate tuple content to key
-			let res = val_ref.mutate(|val: Result<Option<([u8;32], u64)>, StorageRetrievalError>| -> Result<_, StateError> {
-				match val {
-					Ok(Some(_)) => Ok(value),
-					_ => Ok(value),
-				}
-			});
+			// //  write or mutate tuple content to key
+			// let res = val_ref.mutate(|val: Result<Option<([u8;32], u64)>, StorageRetrievalError>| -> Result<_, StateError> {
+			// 	match val {
+			// 		Ok(Some(_)) => Ok(value),
+			// 		_ => Ok(value),
+			// 	}
+			// });
 
-			match res {
-				Ok(value) => {
-					log::info!("OCW ==> mutate successfully: {:?}", value);
-				},
-				Err(MutateStorageError::ValueFunctionFailed(_)) => (),
-				Err(MutateStorageError::ConcurrentModification(_)) => (),
-			}
+			// match res {
+			// 	Ok(value) => {
+			// 		log::info!("OCW ==> mutate successfully: {:?}", value);
+			// 	},
+			// 	Err(MutateStorageError::ValueFunctionFailed(_)) => (),
+			// 	Err(MutateStorageError::ConcurrentModification(_)) => (),
+			// }
             
             log::info!("OCW ==> Leave from offchain workers!: {:?}", block_number);
         }
     }
 
     impl<T: Config> Pallet<T> {
-        #[deny(clippy::clone_double_ref)]
+        // #[deny(clippy::clone_double_ref)]
         fn derive_key() -> Vec<u8> {
-			b"node-ocw::storage"
+			b"node-ocw::storage1"
 				.iter()
 				.copied()
 				.collect::<Vec<u8>>()
         }
+
+		fn to_hex(vec: Vec<u8>) -> String {
+			let mut s = String::with_capacity(vec.len() * 2 + 2);
+			s.push_str("0x");
+
+			for b in vec {
+				s.push_str(&format!("{:02x}", b)); 
+			}
+
+			s
+		}
     }
 }
