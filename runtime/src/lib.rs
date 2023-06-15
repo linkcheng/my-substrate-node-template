@@ -326,7 +326,7 @@ RuntimeCall: From<C>,
 
 impl pallet_ocw::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
-	type AuthorityId = pallet_ocw::crypto::OcwAuthId;
+	// type AuthorityId = pallet_ocw::crypto::OcwAuthId;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.

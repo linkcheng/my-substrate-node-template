@@ -7,9 +7,15 @@ pub use pallet::*;
 
 use frame_system::{
     offchain::{
-        AppCrypto, CreateSignedTransaction, SendSignedTransaction,
+        AppCrypto, CreateSignedTransaction, SendSignedTransaction, SubmitTransaction,
         Signer,
     },
+};
+
+use sp_runtime::{
+    transaction_validity::{
+		InvalidTransaction, TransactionValidity, ValidTransaction
+	},
 };
 
 use sp_runtime::{
@@ -99,11 +105,17 @@ pub mod pallet {
 	// 	type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 	// }
 
+	// #[pallet::config]
+	// pub trait Config: frame_system::Config + CreateSignedTransaction<Call<Self>> {
+	// 	/// Because this pallet emits events, it depends on the runtime's definition of an event.
+	// 	type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+    //     type AuthorityId: AppCrypto<Self::Public, Self::Signature>;
+	// }
+
 	#[pallet::config]
-	pub trait Config: frame_system::Config + CreateSignedTransaction<Call<Self>> {
+	pub trait Config: frame_system::Config + frame_system::offchain::SendTransactionTypes<Call<Self>> {
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
-        type AuthorityId: AppCrypto<Self::Public, Self::Signature>;
 	}
 
 	// The pallet's runtime storage items.
@@ -184,6 +196,16 @@ pub mod pallet {
             log::info!("OCW ==> in submit_data call: {:?}", payload);
             Ok(().into())
         }
+
+		#[pallet::call_index(3)]
+		#[pallet::weight(0)]
+		pub fn submit_data_unsigned(origin: OriginFor<T>, key: u64) -> DispatchResult {
+			ensure_none(origin)?;
+
+            log::info!("OCW ==> in submit_data_unsigned: {:?}", key);
+			// Return a successful DispatchResultWithPostInfo
+			Ok(())
+		}
 	}
 
 	#[pallet::hooks]
@@ -197,12 +219,49 @@ pub mod pallet {
             //     log::info!("OCW ==> Error while fetch github info!");
             // }
 
-            let payload: Vec<u8> = vec![1,2,3,4,5,6,7,8];
-            _ = Self::send_signed_tx(payload);
+            // let payload: Vec<u8> = vec![1,2,3,4,5,6,7,8];
+            // _ = Self::send_signed_tx(payload);
 
-         	log::info!("OCW ==> Leave from offchain workers!: {:?}", block_number);
+
+			let value: u64 = 42;
+			// This is your call to on-chain extrinsic together with any necessary parameters.
+			let call = Call::submit_data_unsigned { key: value };
+
+			// `submit_unsigned_transaction` returns a type of `Result<(), ()>`
+			//	 ref: https://paritytech.github.io/substrate/master/frame_system/offchain/struct.SubmitTransaction.html
+			_ = SubmitTransaction::<T, Call<T>>::submit_unsigned_transaction(call.into())
+				.map_err(|_| {
+				log::error!("OCW ==> Failed in offchain_unsigned_tx");
+			});
+
+			log::info!("OCW ==> Leave from offchain workers!: {:?}", block_number);
         }
     }
+
+	#[pallet::validate_unsigned]
+	impl<T: Config> ValidateUnsigned for Pallet<T> {
+		type Call = Call<T>;
+
+		/// Validate unsigned call to this module.
+		///
+		/// By default unsigned transactions are disallowed, but implementing the validator
+		/// here we make sure that some particular calls (the ones produced by offchain worker)
+		/// are being whitelisted and marked as valid.
+		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
+			const UNSIGNED_TXS_PRIORITY: u64 = 100;
+			let valid_tx = |provide| ValidTransaction::with_tag_prefix("my-pallet")
+				.priority(UNSIGNED_TXS_PRIORITY) // please define `UNSIGNED_TXS_PRIORITY` before this line
+				.and_provides([&provide])
+				.longevity(3)
+				.propagate(true)
+				.build();
+
+			match call {
+				Call::submit_data_unsigned { key: _ } => valid_tx(b"my_unsigned_tx".to_vec()),
+				_ => InvalidTransaction::Call.into(),
+			}
+		}
+	}
 
     impl<T: Config> Pallet<T> {
 		fn fetch_github_info() -> Result<GithubInfo, http::Error> {
@@ -230,26 +289,26 @@ pub mod pallet {
             Ok(gh_info)
         }
 
-        fn send_signed_tx(payload: Vec<u8>) -> Result<(), &'static str> {
-            let signer = Signer::<T, T::AuthorityId>::all_accounts();
-            if !signer.can_sign() {
-                return Err(
-                    "No local accounts available. Consider adding one via `author_insertKey` RPC.",
-                )
-            }
+        // fn send_signed_tx(payload: Vec<u8>) -> Result<(), &'static str> {
+        //     let signer = Signer::<T, T::AuthorityId>::all_accounts();
+        //     if !signer.can_sign() {
+        //         return Err(
+        //             "No local accounts available. Consider adding one via `author_insertKey` RPC.",
+        //         )
+        //     }
 
-            let results = signer.send_signed_transaction(|_account| {
-                Call::submit_data { payload: payload.clone() }
-            });
+        //     let results = signer.send_signed_transaction(|_account| {
+        //         Call::submit_data { payload: payload.clone() }
+        //     });
 
-            for (acc, res) in &results {
-                match res {
-                    Ok(()) => log::info!("[{:?}] Submitted data:{:?}", acc.id, payload),
-                    Err(e) => log::error!("[{:?}] Failed to submit transaction: {:?}", acc.id, e),
-                }
-            }
+        //     for (acc, res) in &results {
+        //         match res {
+        //             Ok(()) => log::info!("[{:?}] Submitted data:{:?}", acc.id, payload),
+        //             Err(e) => log::error!("[{:?}] Failed to submit transaction: {:?}", acc.id, e),
+        //         }
+        //     }
 
-            Ok(())
-        }
+        //     Ok(())
+        // }
     }
 }
