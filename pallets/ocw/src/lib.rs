@@ -7,8 +7,9 @@ pub use pallet::*;
 
 use frame_system::{
     offchain::{
-        AppCrypto, CreateSignedTransaction, SendSignedTransaction, SubmitTransaction,
-        Signer,
+        AppCrypto, 
+		CreateSignedTransaction, SendSignedTransaction, SubmitTransaction, SendUnsignedTransaction, 
+		SignedPayload, Signer, SigningTypes,
     },
 };
 
@@ -16,6 +17,7 @@ use sp_runtime::{
     transaction_validity::{
 		InvalidTransaction, TransactionValidity, ValidTransaction
 	},
+	RuntimeDebug,
 };
 
 use sp_runtime::{
@@ -23,6 +25,8 @@ use sp_runtime::{
         http, Duration,
     },
 };
+
+use codec::{Decode, Encode};
 
 use serde::{Deserialize, Deserializer};
 
@@ -94,6 +98,18 @@ pub mod pallet {
         }
     }
 
+	#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
+	pub struct Payload<Public> {
+		number: u64,
+		public: Public,
+	}
+
+	impl<T: SigningTypes> SignedPayload<T> for Payload<T::Public> {
+		fn public(&self) -> T::Public {
+			self.public.clone()
+		}
+	}
+
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
 
@@ -105,18 +121,18 @@ pub mod pallet {
 	// 	type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 	// }
 
-	// #[pallet::config]
-	// pub trait Config: frame_system::Config + CreateSignedTransaction<Call<Self>> {
-	// 	/// Because this pallet emits events, it depends on the runtime's definition of an event.
-	// 	type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
-    //     type AuthorityId: AppCrypto<Self::Public, Self::Signature>;
-	// }
-
 	#[pallet::config]
-	pub trait Config: frame_system::Config + frame_system::offchain::SendTransactionTypes<Call<Self>> {
+	pub trait Config: frame_system::Config + CreateSignedTransaction<Call<Self>> {
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+        type AuthorityId: AppCrypto<Self::Public, Self::Signature>;
 	}
+
+	// #[pallet::config]
+	// pub trait Config: frame_system::Config + frame_system::offchain::SendTransactionTypes<Call<Self>> {
+	// 	/// Because this pallet emits events, it depends on the runtime's definition of an event.
+	// 	type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+	// }
 
 	// The pallet's runtime storage items.
 	// https://docs.substrate.io/main-docs/build/runtime-storage/
@@ -206,6 +222,16 @@ pub mod pallet {
 			// Return a successful DispatchResultWithPostInfo
 			Ok(())
 		}
+
+		#[pallet::call_index(4)]
+		#[pallet::weight(0)]
+		pub fn unsigned_extrinsic_with_signed_payload(origin: OriginFor<T>, payload: Payload<T::Public>, _signature: T::Signature,) -> DispatchResult {
+			ensure_none(origin)?;
+
+            log::info!("OCW ==> in call unsigned_extrinsic_with_signed_payload: {:?}", payload.number);
+			// Return a successful DispatchResultWithPostInfo
+			Ok(())
+		}
 	}
 
 	#[pallet::hooks]
@@ -223,16 +249,40 @@ pub mod pallet {
             // _ = Self::send_signed_tx(payload);
 
 
-			let value: u64 = 42;
-			// This is your call to on-chain extrinsic together with any necessary parameters.
-			let call = Call::submit_data_unsigned { key: value };
+			// let value: u64 = 42;
+			// // This is your call to on-chain extrinsic together with any necessary parameters.
+			// let call = Call::submit_data_unsigned { key: value };
 
-			// `submit_unsigned_transaction` returns a type of `Result<(), ()>`
-			//	 ref: https://paritytech.github.io/substrate/master/frame_system/offchain/struct.SubmitTransaction.html
-			_ = SubmitTransaction::<T, Call<T>>::submit_unsigned_transaction(call.into())
-				.map_err(|_| {
-				log::error!("OCW ==> Failed in offchain_unsigned_tx");
-			});
+			// // `submit_unsigned_transaction` returns a type of `Result<(), ()>`
+			// //	 ref: https://paritytech.github.io/substrate/master/frame_system/offchain/struct.SubmitTransaction.html
+			// _ = SubmitTransaction::<T, Call<T>>::submit_unsigned_transaction(call.into())
+			// 	.map_err(|_| {
+			// 	log::error!("OCW ==> Failed in offchain_unsigned_tx");
+			// });
+			
+
+			let number: u64 = 42;
+			// Retrieve the signer to sign the payload
+			let signer = Signer::<T, T::AuthorityId>::any_account();
+
+			// `send_unsigned_transaction` is returning a type of `Option<(Account<T>, Result<(), ()>)>`.
+			//	 The returned result means:
+			//	 - `None`: no account is available for sending transaction
+			//	 - `Some((account, Ok(())))`: transaction is successfully sent
+			//	 - `Some((account, Err(())))`: error occurred when sending the transaction
+			if let Some((_, res)) = signer.send_unsigned_transaction(
+				// this line is to prepare and return payload
+				|acct| Payload { number, public: acct.public.clone() },
+				|payload, signature| Call::unsigned_extrinsic_with_signed_payload { payload, signature },
+			) {
+				match res {
+					Ok(()) => {log::info!("OCW ==> unsigned tx with signed payload successfully sent.");}
+					Err(()) => {log::error!("OCW ==> sending unsigned tx with signed payload failed.");}
+				};
+			} else {
+				// The case of `None`: no account is available for sending
+				log::error!("OCW ==> No local account available");
+			}
 
 			log::info!("OCW ==> Leave from offchain workers!: {:?}", block_number);
         }
@@ -256,8 +306,21 @@ pub mod pallet {
 				.propagate(true)
 				.build();
 
+			// match call {
+			// 	Call::submit_data_unsigned { key: _ } => valid_tx(b"my_unsigned_tx".to_vec()),
+			// 	_ => InvalidTransaction::Call.into(),
+			// }
+			
 			match call {
-				Call::submit_data_unsigned { key: _ } => valid_tx(b"my_unsigned_tx".to_vec()),
+				Call::unsigned_extrinsic_with_signed_payload {
+					ref payload,
+					ref signature
+				} => {
+					if !SignedPayload::<T>::verify::<T::AuthorityId>(payload, signature.clone()) {
+						return InvalidTransaction::BadProof.into();
+					}
+					valid_tx(b"unsigned_extrinsic_with_signed_payload".to_vec())
+				},
 				_ => InvalidTransaction::Call.into(),
 			}
 		}
