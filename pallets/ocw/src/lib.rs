@@ -69,12 +69,8 @@ pub mod pallet {
     use sp_std::vec;
 
 	#[derive(Deserialize, Encode, Decode)]
-    pub struct GithubInfo {
-        #[serde(deserialize_with = "de_string_to_bytes")]
-        login: Vec<u8>,
-        #[serde(deserialize_with = "de_string_to_bytes")]
-        blog: Vec<u8>,
-        public_repos: u32,
+    pub struct DataInfo {
+        price: u32,
     }
 
 	pub fn de_string_to_bytes<'de, D>(de: D) -> Result<Vec<u8>, D::Error>
@@ -86,21 +82,15 @@ pub mod pallet {
 		}
 
     use core::{convert::TryInto, fmt};
-    impl fmt::Debug for GithubInfo {
+    impl fmt::Debug for DataInfo {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(
-                f,
-                "{{ login: {}, blog: {}, public_repos: {} }}",
-                sp_std::str::from_utf8(&self.login).map_err(|_| fmt::Error)?,
-                sp_std::str::from_utf8(&self.blog).map_err(|_| fmt::Error)?,
-                &self.public_repos
-                )
+            write!(f, "{{ price: {} }}", &self.price)
         }
     }
 
 	#[derive(Encode, Decode, Clone, PartialEq, Eq, RuntimeDebug, scale_info::TypeInfo)]
 	pub struct Payload<Public> {
-		number: u64,
+		price: u32,
 		public: Public,
 	}
 
@@ -225,10 +215,12 @@ pub mod pallet {
 
 		#[pallet::call_index(4)]
 		#[pallet::weight(0)]
-		pub fn unsigned_extrinsic_with_signed_payload(origin: OriginFor<T>, payload: Payload<T::Public>, _signature: T::Signature,) -> DispatchResult {
+		pub fn unsigned_extrinsic_with_signed_payload(
+			origin: OriginFor<T>, payload: Payload<T::Public>, _signature: T::Signature
+		) -> DispatchResult {
 			ensure_none(origin)?;
 
-            log::info!("OCW ==> in call unsigned_extrinsic_with_signed_payload: {:?}", payload.number);
+            log::info!("OCW ==> in call unsigned_extrinsic_with_signed_payload: {:?}", payload.price);
 			// Return a successful DispatchResultWithPostInfo
 			Ok(())
 		}
@@ -237,13 +229,17 @@ pub mod pallet {
 	#[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn offchain_worker(block_number: T::BlockNumber) {
-            log::info!("OCW ==> Hello World from offchain workers!: {:?}", block_number);
-
-            // if let Ok(info) = Self::fetch_github_info() {
-            //     log::info!("OCW ==> Github Info: {:?}", info);
-            // } else {
-            //     log::info!("OCW ==> Error while fetch github info!");
-            // }
+            log::info!("OCW ==> Hello World from offchai workers!: {:?}", block_number);
+			
+			let result; 
+			if let Ok(res) = Self::fetch_data() {
+				result = res; 
+				log::info!("OCW ==> fetch data info {:?}", result);
+			} else {
+				log::info!("OCW ==> Error while fetch data info!");
+				return;
+			}
+			
 
             // let payload: Vec<u8> = vec![1,2,3,4,5,6,7,8];
             // _ = Self::send_signed_tx(payload);
@@ -261,7 +257,7 @@ pub mod pallet {
 			// });
 			
 
-			let number: u64 = 42;
+			// let number: u64 = 42;
 			// Retrieve the signer to sign the payload
 			let signer = Signer::<T, T::AuthorityId>::any_account();
 
@@ -270,9 +266,10 @@ pub mod pallet {
 			//	 - `None`: no account is available for sending transaction
 			//	 - `Some((account, Ok(())))`: transaction is successfully sent
 			//	 - `Some((account, Err(())))`: error occurred when sending the transaction
+			
 			if let Some((_, res)) = signer.send_unsigned_transaction(
 				// this line is to prepare and return payload
-				|acct| Payload { number, public: acct.public.clone() },
+				|acct| Payload { price: result.price, public: acct.public.clone() },
 				|payload, signature| Call::unsigned_extrinsic_with_signed_payload { payload, signature },
 			) {
 				match res {
@@ -327,18 +324,20 @@ pub mod pallet {
 	}
 
     impl<T: Config> Pallet<T> {
-		fn fetch_github_info() -> Result<GithubInfo, http::Error> {
+		fn fetch_data() -> Result<DataInfo, http::Error> {
             // prepare for send request
             let deadline = sp_io::offchain::timestamp().add(Duration::from_millis(8_000));
-            let request = http::Request::get("https://api.github.com/orgs/substrate-developer-hub");
+            let request = http::Request::get("http://127.0.0.1:8000/data");
             let pending = request
                 .add_header("User-Agent", "Substrate-Offchain-Worker")
                 .deadline(deadline).send().map_err(|_| http::Error::IoError)?;
+
             let response = pending.try_wait(deadline).map_err(|_| http::Error::DeadlineReached)??;
             if response.code != 200 {
                 log::warn!("Unexpected status code: {}", response.code);
                 return Err(http::Error::Unknown)
             }
+
             let body = response.body().collect::<Vec<u8>>();
             let body_str = sp_std::str::from_utf8(&body).map_err(|_| {
                 log::warn!("No UTF8 body");
@@ -346,10 +345,9 @@ pub mod pallet {
             })?;
 
             // parse the response str
-            let gh_info: GithubInfo =
-                serde_json::from_str(body_str).map_err(|_| http::Error::Unknown)?;
+            let info: DataInfo = serde_json::from_str(body_str).map_err(|_| http::Error::Unknown)?;
 
-            Ok(gh_info)
+            Ok(info)
         }
 
         // fn send_signed_tx(payload: Vec<u8>) -> Result<(), &'static str> {
