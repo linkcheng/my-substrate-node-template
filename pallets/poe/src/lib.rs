@@ -4,6 +4,7 @@
 /// Learn more about FRAME and the core library of Substrate FRAME pallets:
 /// <https://docs.substrate.io/reference/frame-pallets/>
 pub use pallet::*;
+pub use weights::WeightInfo;
 
 #[cfg(test)]
 mod mock;
@@ -11,11 +12,17 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
+
+pub mod weights;
+
 #[frame_support::pallet]
 pub mod pallet {
-	use frame_support::pallet_prelude::*;
-	use frame_system::pallet_prelude::*;
-	use sp_std::prelude::*;
+	pub use frame_support::pallet_prelude::*;
+	pub use frame_system::pallet_prelude::*;
+	pub use sp_std::prelude::*;
+	pub use super::*;
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
@@ -26,6 +33,7 @@ pub mod pallet {
 		type MaxClaimLength: Get<u32>;
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+		type WeightInfo: WeightInfo;
 	}
 
 	// The pallet's runtime storage items.
@@ -67,7 +75,7 @@ pub mod pallet {
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		#[pallet::call_index(0)]
-		#[pallet::weight(10_000 + T::DbWeight::get().writes(1).ref_time())]
+		#[pallet::weight(T::WeightInfo::create_claim(bounded_claim.len() as u32))]
 		pub fn create_claim(
 			origin: OriginFor<T>,
 			bounded_claim: BoundedVec<u8, T::MaxClaimLength>,
@@ -87,7 +95,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(1)]
-		#[pallet::weight(10_000 + T::DbWeight::get().writes(1).ref_time())]
+		#[pallet::weight(T::WeightInfo::revoke_claim(bounded_claim.len() as u32))]
 		pub fn revoke_claim(
 			origin: OriginFor<T>,
 			bounded_claim: BoundedVec<u8, T::MaxClaimLength>,
@@ -105,7 +113,7 @@ pub mod pallet {
 		}
 
 		#[pallet::call_index(2)]
-		#[pallet::weight(10_000 + T::DbWeight::get().writes(1).ref_time())]
+		#[pallet::weight(T::WeightInfo::transfer_claim(bounded_claim.len() as u32))]
 		pub fn transfer_claim(
 			origin: OriginFor<T>,
 			bounded_claim: BoundedVec<u8, T::MaxClaimLength>,
